@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="SDT Dashboard">
+<meta name="robots" content="noindex">
+<title>Self-Determination Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+<style>
+/* Layout idea: one narrow editorial column, hairline rules between sections, no card grid.
+   The three needs carry colour; energy and recovery stay neutral and use a different bar form. */
+:root{
+  --bg:#f3eee4; --surface:#faf7f0; --ink:#25282a; --muted:#6a6860; --line:#d9d1c1; --track:#e6dfd1;
+  --aut:#2f4a6d; --comp:#b25538; --rel:#567659; --state:#3b3e41;
+  --watch:#9a7412; --attn:#b9571f; --sig:#962c2c; --ok:#4a674d;
+  --display:"Newsreader","Iowan Old Style",Georgia,serif;
+  --body:"IBM Plex Sans","Helvetica Neue",Arial,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#1b1c1b; --surface:#242523; --ink:#ebe5d9; --muted:#a29d92; --line:#3b3a35; --track:#30302c;
+    --aut:#8fb0dc; --comp:#e08b6c; --rel:#9bbf9d; --state:#d6d0c4;
+    --watch:#d9b24a; --attn:#e88a52; --sig:#e87878; --ok:#9bbf9d; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#1b1c1b; --surface:#242523; --ink:#ebe5d9; --muted:#a29d92; --line:#3b3a35; --track:#30302c;
+  --aut:#8fb0dc; --comp:#e08b6c; --rel:#9bbf9d; --state:#d6d0c4;
+  --watch:#d9b24a; --attn:#e88a52; --sig:#e87878; --ok:#9bbf9d; color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 var(--body)}
+.wrap{max-width:680px;margin:0 auto;padding:0 20px 96px}
+.mast{padding:36px 0 18px}
+.eyebrow{font:500 11px/1.4 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+h1{font:400 38px/1.02 var(--display);letter-spacing:-.01em;margin:0;text-wrap:balance}
+h1 em{font-style:italic}
+.sub{font:italic 400 18px/1.35 var(--display);color:var(--muted);margin:10px 0 0;max-width:30em;text-wrap:balance}
+nav.tabs{position:sticky;top:0;z-index:5;background:var(--bg);border-top:1px solid var(--ink);border-bottom:1px solid var(--line);display:flex;gap:4px;overflow-x:auto;margin:0 -20px;padding:0 16px;scrollbar-width:none}
+nav.tabs::-webkit-scrollbar{display:none}
+nav.tabs a{flex:none;padding:12px 8px 11px;font:500 13px/1 var(--body);color:var(--muted);text-decoration:none;border-bottom:2px solid transparent;white-space:nowrap}
+nav.tabs a[aria-current="page"]{color:var(--ink);border-bottom-color:var(--ink)}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--aut);outline-offset:2px}
+section{padding:26px 0;border-bottom:1px solid var(--line)}
+section:last-child{border-bottom:0}
+h2{font:400 25px/1.15 var(--display);margin:0 0 4px;text-wrap:balance}
+h3{font:600 15px/1.3 var(--body);margin:0}
+h4{font:600 13px/1.3 var(--body);margin:18px 0 6px}
+p{margin:8px 0}
+.lede{color:var(--muted);font-size:14px;margin:2px 0 16px;max-width:60ch}
+.small{font-size:13px;color:var(--muted)}
+.num{font:500 15px/1 var(--mono);font-variant-numeric:tabular-nums}
+.stack{display:flex;flex-direction:column;gap:18px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.spread{display:flex;justify-content:space-between;gap:12px;align-items:baseline;flex-wrap:wrap}
+
+/* status */
+.status{display:flex;gap:14px;align-items:flex-start;padding:16px;background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--lc,var(--muted))}
+.status[data-l="stable"]{--lc:var(--ok)} .status[data-l="watch"]{--lc:var(--watch)}
+.status[data-l="attention"]{--lc:var(--attn)} .status[data-l="significant"]{--lc:var(--sig)}
+.pips{display:flex;gap:3px;margin-top:5px;flex:none}
+.pips i{width:8px;height:8px;border-radius:50%;border:1.5px solid var(--lc,var(--muted))}
+.pips i.on{background:var(--lc)}
+.status strong{font:600 15px/1.3 var(--body)}
+.status ul{margin:6px 0 0;padding-left:18px;font-size:14px}
+.status li{margin:3px 0}
+
+/* measures */
+.need{--c:var(--state)}
+.need[data-d="aut"]{--c:var(--aut)} .need[data-d="comp"]{--c:var(--comp)} .need[data-d="rel"]{--c:var(--rel)}
+.need h3{color:var(--c)}
+.meas{display:grid;grid-template-columns:1fr 34px;gap:10px;align-items:center;margin-top:8px}
+.bar{height:12px;background:var(--track);border-radius:2px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--c);border-radius:2px;transition:width .5s ease}
+.bar.fr i{background:repeating-linear-gradient(135deg,var(--c) 0 3px,transparent 3px 6px)}
+.bar.st{height:6px;border-radius:0;background:transparent;border-bottom:1px solid var(--muted)}
+.bar.st i{border-radius:0;background:var(--state)}
+.meas .num{text-align:right}
+.meta{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;color:var(--muted);margin-top:5px;flex-wrap:wrap}
+.ctx{font-size:13px;color:var(--muted);margin:6px 0 0}
+.delta.up{color:var(--ok)} .delta.down{color:var(--attn)}
+.na{font-size:13px;color:var(--muted);font-style:italic}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+@media (max-width:520px){.grid2{grid-template-columns:1fr}h1{font-size:31px}.sub{font-size:16px}}
+svg{max-width:100%;height:auto;display:block}
+svg text{font:11px var(--body);fill:var(--muted)}
+svg .v{font:500 11px var(--mono);fill:var(--ink)}
+.chart{overflow-x:auto}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin-top:6px}
+.legend i{display:inline-block;width:16px;height:0;border-top:2px solid var(--c);vertical-align:middle;margin-right:5px}
+.legend i.dash{border-top-style:dashed}
+
+/* controls */
+button,.btn{font:500 14px/1 var(--body);padding:11px 16px;border:1px solid var(--ink);background:transparent;color:var(--ink);border-radius:2px;cursor:pointer;text-decoration:none;display:inline-block}
+button.primary,.btn.primary{background:var(--ink);color:var(--bg)}
+button.quiet{border-color:var(--line);color:var(--muted);padding:8px 12px;font-size:13px}
+button.danger{border-color:var(--sig);color:var(--sig)}
+button:disabled{opacity:.45;cursor:default}
+label{font-size:13px;font-weight:500;display:block;margin:12px 0 5px}
+input[type=text],input[type=date],input[type=number],select,textarea{width:100%;font:15px/1.4 var(--body);color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:2px;padding:10px 11px}
+textarea{min-height:76px;resize:vertical}
+input[type=range]{width:100%;accent-color:var(--c);height:30px;margin:0}
+.slider{display:grid;grid-template-columns:1fr 44px;gap:12px;align-items:center}
+.slider output{font:500 22px/1 var(--mono);text-align:right;color:var(--c)}
+.q{font-size:14px;margin:14px 0 2px}
+.scale{display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted)}
+.check{display:flex;gap:8px;align-items:center;font-size:13px;font-weight:400;margin:8px 0 0;color:var(--muted)}
+.check input{width:18px;height:18px;accent-color:var(--ink)}
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chip{font:400 13px/1 var(--body);padding:8px 11px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--ink)}
+.chip[aria-pressed="true"]{background:var(--c,var(--ink));border-color:var(--c,var(--ink));color:var(--bg)}
+details{margin-top:12px}
+summary{font-size:13px;font-weight:500;cursor:pointer;color:var(--muted);padding:6px 0}
+.tag{display:inline-block;font:500 10.5px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;padding:4px 6px;border:1px solid currentColor;border-radius:2px;margin-right:6px;vertical-align:1px}
+.tag.self{color:var(--rel)} .tag.negotiate{color:var(--aut)} .tag.structural{color:var(--comp)} .tag.load{color:var(--watch)}
+.item{padding:16px 0;border-top:1px solid var(--line)}
+.item:first-of-type{border-top:0}
+.item p{margin:6px 0}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{text-align:right;padding:7px 8px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{font-weight:500;color:var(--muted)}
+.scroll{overflow-x:auto}
+.tri{width:34px;height:34px;padding:0;border:1px solid var(--line);font:500 15px/1 var(--mono);color:var(--muted)}
+.tri[data-v="1"]{background:var(--ok);color:var(--bg);border-color:var(--ok)}
+.tri[data-v="-1"]{background:var(--attn);color:var(--bg);border-color:var(--attn)}
+.areas{display:grid;grid-template-columns:1fr repeat(3,34px);gap:6px 8px;align-items:center;font-size:13.5px}
+.areas b{font:500 11px var(--mono);text-align:center;color:var(--muted)}
+.report h3{font:400 19px/1.25 var(--display);margin:20px 0 4px}
+.report ul{padding-left:18px;margin:6px 0}
+.report p,.report li{max-width:62ch}
+.notice{margin:14px 0 0;padding:11px 14px;font-size:13.5px;background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--watch)}
+#toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:11px 16px;font-size:14px;border-radius:2px;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw;z-index:9}
+#toast.on{opacity:1}
+.hbar{display:grid;grid-template-columns:minmax(120px,1fr) 2fr 24px;gap:10px;align-items:center;font-size:13px;margin:6px 0}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="mast">
+    <p class="eyebrow">Experimental personal monitoring tool</p>
+    <h1>The Self-Determination <em>Dashboard</em></h1>
+    <p class="sub">Understanding what sustains me, what depletes me, and what needs to change.</p>
+  </header>
+  <nav class="tabs" aria-label="Sections">
+    <a href="#overview">Overview</a><a href="#check-in">Check-in</a><a href="#trends">Trends</a><a href="#actions">Actions</a><a href="#journal">Journal</a><a href="#report">Report</a><a href="#data">Data</a>
+  </nav>
+  <div id="notice"></div>
+  <main id="view"></main>
+</div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script id="core">
+/* Pure logic: no DOM. */
+var SDD = (function(){
+  var DOMAINS = [
+    {id:'aut', name:'Autonomy', kind:'need', s:'aut_s', f:'aut_f',
+     satQ:'I had meaningful control over my work, my time and my direction.',
+     frQ:'I felt pressured into things I did not really want to do.',
+     reflect:'What gave me a sense of autonomy this week? What made me feel constrained?',
+     factors:{money:'Financial limitations',institution:'Institutional restrictions',workload:'Workload',expectations:'External expectations',social:'Social obligations',schedule:'Unclear schedules',nopower:'Lack of decision-making power',admin:'Administrative burdens',avoidance:'Procrastination or avoidance'}},
+    {id:'comp', name:'Competence', kind:'need', s:'comp_s', f:'comp_f',
+     satQ:'I felt effective and capable, with room to use and grow my skills.',
+     frQ:'I repeatedly felt inadequate, ineffective or incapable.',
+     reflect:'When did I feel particularly competent? When did I feel ineffective?',
+     factors:{underused:'Underused skills',training:'Insufficient training',feedback:'Lack of feedback',hard:'Difficult responsibilities',repetitive:'Repetitive work',stagnation:'Intellectual stagnation',progress:'No meaningful progress',resources:'Inadequate resources'}},
+    {id:'rel', name:'Relatedness', kind:'need', s:'rel_s', f:'rel_f',
+     satQ:'I felt connected to people who matter to me.',
+     frQ:'I felt excluded, rejected or emotionally disconnected.',
+     reflect:'When did I feel connected to other people? What contributed to loneliness?',
+     factors:{lonely:'Loneliness',single:'Being single',activities:'Few social activities',moneysocial:'Cost of socialising',transport:'Transport difficulties',conflict:'Interpersonal conflict',support:'Too little emotional support',intellectual:'No intellectual companionship'}},
+    {id:'energy', name:'Energy', kind:'state', s:'energy', f:null,
+     satQ:'Physical and mental energy, vitality, and readiness to start things.',
+     reflect:'What replenished my energy? What drained it?',
+     factors:{physical:'Physical tiredness',cognitive:'Cognitive fatigue',motivation:'Hard to start things'}},
+    {id:'recovery', name:'Recovery', kind:'state', s:'recovery', f:null,
+     satQ:'Sleep, rest on waking, leisure time and detachment from work.',
+     reflect:'What interfered with recovery? What helped?',
+     factors:{sleep:'Short or poor sleep',unrested:'Waking unrested',noleisure:'No leisure time',detach:'Could not detach from work',accumulated:'Accumulated fatigue'}}
+  ];
+  var KEYS = ['aut_s','aut_f','comp_s','comp_f','rel_s','rel_f','energy','recovery'];
+  var KEYNAMES = {aut_s:'Autonomy satisfaction',aut_f:'Autonomy frustration',comp_s:'Competence satisfaction',comp_f:'Competence frustration',rel_s:'Relatedness satisfaction',rel_f:'Relatedness frustration',energy:'Energy',recovery:'Recovery'};
+  var AREAS = {clinical:'Clinical work',research:'Research',teaching:'Teaching and academic development',profrel:'Professional relationships',friends:'Friendships',romantic:'Romantic relationships',family:'Family',personal:'Personal development',leisure:'Leisure and creativity',finances:'Financial circumstances',health:'Physical health and recovery'};
+  var WORK_AREAS = ['clinical','research','teaching','profrel'];
+
+  /* t: self = I can do this myself; negotiate = needs someone else's agreement; structural = may not be individually solvable. load: adds to workload. */
+  var SUG = {
+    aut:{
+      money:[{t:'self',text:'Name one income decision that is yours to make this month (a fee, a slot, an invoice to chase) and make it.'},
+             {t:'structural',text:'Write down which funding or pay arrangement the pressure comes from and when it is next decided. Plan around that date; a mood boost will not move it.'}],
+      institution:[{t:'negotiate',text:'Ask for the rule or restriction in writing, and ask what flexibility exists inside it.'},
+                   {t:'self',text:'List what you can decide without anyone\'s permission this week, and decide one of those things.'}],
+      workload:[{t:'self',text:'Defer or drop one commitment this week. Choose which one today.'}],
+      expectations:[{t:'negotiate',text:'Take one commitment you accepted under pressure and renegotiate its scope, date or format with the person who asked.'},
+                    {t:'self',text:'Before the next yes, wait a day and ask whether you would accept the same request from a stranger. That separates the obligation from the relationship.'}],
+      social:[{t:'negotiate',text:'Decline or shorten one social obligation this week, and say so early.'}],
+      schedule:[{t:'negotiate',text:'Ask for the missing dates in writing and give a date by which you need the answer.'},
+                {t:'self',text:'List the decisions you can make now without that information, and make them.'}],
+      nopower:[{t:'structural',text:'Note where the decision actually sits. If this recurs for four weeks, treat it as grounds to renegotiate the role, not as a passing mood.'}],
+      admin:[{t:'self',text:'Put admin in one fixed block and keep it out of the rest of the week.'}],
+      avoidance:[{t:'self',text:'Do the first ten minutes of the avoided task, then decide freely whether to continue.'}],
+      _:[{t:'self',text:'Mark this week\'s commitments as chosen or imposed. Protect one chosen block of time.'},
+         {t:'negotiate',text:'Pick the most imposed commitment and ask to change one thing about it.'}]
+    },
+    comp:{
+      underused:[{t:'self',text:'Inside work you already have, pick one case to work up as a full medical and psychiatric formulation.'},
+                 {t:'negotiate',text:'Ask for a change in case mix: more assessment, medical psychiatry, teaching or consult work.'}],
+      training:[{t:'self',text:'Choose one psychotherapy micro-skill and practise it deliberately in a session you already have booked.'},
+                {t:'negotiate',text:'Arrange supervision or peer consultation for the cases where you feel least effective.'}],
+      feedback:[{t:'negotiate',text:'Ask one supervisor or peer for specific feedback on one piece of work.'}],
+      hard:[{t:'negotiate',text:'Name the responsibility that outruns your current training and ask for support or shared cover on it.'}],
+      repetitive:[{t:'self',text:'Change one thing in the repetitive work: teach it, audit it, or write up one interesting instance.'}],
+      stagnation:[{t:'self',load:true,text:'Give yourself two short, deadline-free sessions on something intellectually alive: a course, a paper, a reading project.'}],
+      progress:[{t:'self',text:'Finish one small thing end to end this week and write down that you did.'}],
+      resources:[{t:'structural',text:'Record which missing resource is limiting your work and who controls it. This is not a competence problem.'}],
+      _:[{t:'self',text:'Recall the last piece of work that felt like mastery, and schedule one hour of that kind of work.'},
+         {t:'negotiate',text:'Ask for feedback on something you did well, so perceived and actual competence can be compared.'}]
+    },
+    rel:{
+      lonely:[{t:'self',text:'Message one existing friend today and fix a time to talk this week.'}],
+      single:[{t:'self',text:'Being single is context, not a deficit. Name which kind of connection you actually missed this week before acting on it.'}],
+      activities:[{t:'self',text:'Put one low-cost shared activity in the calendar: a walk, a meal at home, a call.'}],
+      moneysocial:[{t:'self',text:'Choose contact that costs nothing: a long call, a walk, hosting at home.'}],
+      transport:[{t:'self',text:'Pick contact that needs no travel this week, or invite someone to come to you.'}],
+      conflict:[{t:'negotiate',text:'Have the conversation you are postponing, or decide deliberately to let the matter go.'}],
+      support:[{t:'self',text:'Tell one trusted person plainly what this period has been like.'}],
+      intellectual:[{t:'self',load:true,text:'Join or start one recurring exchange of ideas: a journal club, a reading group, an online community.'}],
+      _:[{t:'self',text:'Reconnect with one person you have not spoken to in a month.'}]
+    },
+    energy:{
+      _:[{t:'self',text:'Put demanding work in your best hours and leave the rest of the day lighter.'},
+         {t:'self',text:'Notice which activity this week cost more energy than it should have, and shorten or move it.'}]
+    },
+    recovery:{
+      sleep:[{t:'self',text:'Log your actual sleep and wake times for seven days before changing anything.'}],
+      detach:[{t:'self',text:'Set an end-of-work cue so that work stops occupying your attention in the evening.'}],
+      noleisure:[{t:'self',text:'Protect one work-free block this week and decide in advance what it is for.'}],
+      _:[{t:'self',text:'Before adding anything new, remove or defer one commitment this week.'},
+         {t:'self',text:'Protect one work-free block this week and decide in advance what it is for.'},
+         {t:'structural',text:'If recovery stays low for three weeks despite this, the load itself needs renegotiating.'}]
+    }
+  };
+
+  function band(v){ if(v==null) return 'not assessed'; return v<=2?'very low':v<=4?'low':v<=6?'moderate':v<=8?'high':'very high'; }
+  function mean(a){ return a.length? a.reduce(function(x,y){return x+y;},0)/a.length : null; }
+  function sortC(list){ return list.slice().sort(function(a,b){return a.date<b.date?-1:a.date>b.date?1:0;}); }
+  function val(c,key){ return (c && c.scores && c.scores[key]!=null) ? c.scores[key] : null; }
+  function series(cs,key){ return cs.map(function(c){return val(c,key);}); }
+  function dom(id){ for(var i=0;i<DOMAINS.length;i++) if(DOMAINS[i].id===id) return DOMAINS[i]; return null; }
+  function label(d){ return d.kind==='need' ? d.name+' satisfaction' : d.name; }
+
+  function baseline(cs,key,profile){
+    profile = profile||{};
+    var m = profile.manual && profile.manual[key];
+    if(m!=null && m!=='' && !isNaN(+m)) return {value:+m, source:'set by you'};
+    var w = +profile.baselineWeeks || 6;
+    if(cs.length < w) return null;
+    var vals = series(cs,key).slice(0,w).filter(function(v){return v!=null;});
+    if(vals.length < 3) return null;
+    return {value:mean(vals), source:'mean of your first '+w+' check-ins'};
+  }
+
+  function analyse(checkins, interventions, profile){
+    var cs = sortC(checkins||[]), n = cs.length, out = {n:n, domains:{}, level:'none', affected:[]};
+    if(!n) return out;
+    interventions = interventions||[]; profile = profile||{};
+    var w = +profile.baselineWeeks || 6;
+    DOMAINS.forEach(function(d){
+      var f = [], s = series(cs,d.s), cur = s[n-1], prev = n>1 ? s[n-2] : null, L = label(d);
+      if(cur!=null){
+        var t3 = s.slice(-3), t4 = s.slice(-4);
+        var pl = t3.length===3 && t3.every(function(v){return v!=null && v<=4;});
+        if(pl) f.push({type:'persistent-low',weight:2,text:L+' has been low (4 or below) for three check-ins in a row.'});
+        else if(cur<=4) f.push({type:'isolated-low',weight:1,text:L+' is '+band(cur)+' this week ('+cur+'/10). One low score is not yet a trend.'});
+        if(prev!=null && cur-prev<=-3) f.push({type:'rapid-decline',weight:2,text:L+' fell '+(prev-cur)+' points since the last check-in.'});
+        if(t4.length===4 && t4.every(function(v){return v!=null;}) && t4[1]<t4[0] && t4[2]<t4[1] && t4[3]<t4[2]) f.push({type:'sustained-decline',weight:2,text:L+' has fallen at each of the last three check-ins.'});
+        var b = baseline(cs,d.s,profile);
+        if(b && n>w && prev!=null && cur<=b.value-2 && prev<=b.value-2) f.push({type:'below-baseline',weight:2,text:L+' has been 2 or more points below your baseline ('+b.value.toFixed(1)+') for two check-ins.'});
+      }
+      if(d.f){
+        var fr = series(cs,d.f), fc = fr[n-1], fp = n>1 ? fr[n-2] : null;
+        if(fc!=null){
+          var f3 = fr.slice(-3), f4 = fr.slice(-4);
+          if(f3.length===3 && f3.every(function(v){return v!=null && v>=6;})) f.push({type:'persistent-frustration',weight:2,text:d.name+' frustration has been high (6 or above) for three check-ins in a row.'});
+          else if(fc>=6) f.push({type:'high-frustration',weight:1,text:d.name+' frustration is high this week ('+fc+'/10).'});
+          if(fp!=null && fc-fp>=3) f.push({type:'rising-frustration',weight:2,text:d.name+' frustration rose '+(fc-fp)+' points since the last check-in.'});
+          else if(f4.length===4 && f4.every(function(v){return v!=null;}) && f4[1]>f4[0] && f4[2]>f4[1] && f4[3]>f4[2]) f.push({type:'rising-frustration',weight:2,text:d.name+' frustration has risen at each of the last three check-ins.'});
+        }
+      }
+      interventions.forEach(function(iv){
+        if(iv.need!==d.id || !iv.started || iv.status==='planned' || iv.status==='dropped') return;
+        var before = cs.filter(function(c){return c.date<=iv.started;}), after = cs.filter(function(c){return c.date>iv.started;});
+        var start = before.length ? val(before[before.length-1],d.s) : val(cs[0],d.s);
+        var av = after.map(function(c){return val(c,d.s);}).filter(function(v){return v!=null;});
+        if(start!=null && start<=4 && av.length>=3 && Math.max.apply(null,av.slice(-3))<=start)
+          f.push({type:'no-response',weight:2,text:L+' has not improved over three check-ins since you began: '+iv.action});
+      });
+      out.domains[d.id] = {flags:f, cur:cur, prev:prev};
+      if(f.length) out.affected.push(d.id);
+    });
+    var heavy = out.affected.filter(function(id){return out.domains[id].flags.some(function(x){return x.weight>=2;});});
+    var pers = out.affected.filter(function(id){return out.domains[id].flags.some(function(x){return x.type==='persistent-low';});});
+    var persState = pers.some(function(id){return dom(id).kind==='state';});
+    if(pers.length>=3 || (pers.length>=2 && persState)) out.level='significant';
+    else if(heavy.length>=1 || out.affected.length>=2) out.level='attention';
+    else if(out.affected.length===1) out.level='watch';
+    else out.level='stable';
+    return out;
+  }
+
+  var LEVELS = {
+    none:{name:'No check-ins yet',pips:0,text:'Record a check-in to begin.'},
+    stable:{name:'Stable',pips:0,text:'No meaningful deterioration in any dimension.'},
+    watch:{name:'Watch',pips:1,text:'One dimension shows a concerning score or decline.'},
+    attention:{name:'Attention needed',pips:2,text:'Persistent deterioration, or more than one dimension affected.'},
+    significant:{name:'Significant depletion',pips:3,text:'Marked, sustained low scores across dimensions. Reassess workload, circumstances and support.'}
+  };
+
+  function priorities(checkins, interventions){
+    var cs = sortC(checkins||[]), n = cs.length, out = {focus:[], actions:[], lowRecovery:false};
+    if(!n) return out;
+    var c = cs[n-1], rec = val(c,'recovery');
+    out.lowRecovery = rec!=null && rec<=4;
+    var scored = DOMAINS.map(function(d){
+      var sat = val(c,d.s); if(sat==null) return {d:d,p:0};
+      var sev = Math.max(0,6-sat), pers = 0;
+      for(var i=n-2;i>=0 && pers<3;i--){ var v = val(cs[i],d.s); if(v!=null && v<=4) pers++; else break; }
+      var fr = d.f ? val(c,d.f) : null, frp = fr!=null ? Math.max(0,fr-4) : 0;
+      return {d:d, p: sev + .75*pers + .75*frp};
+    }).filter(function(x){return x.p>0;}).sort(function(a,b){return b.p-a.p;});
+    var focus = scored.slice(0,2).map(function(x){return x.d;});
+    out.focus = focus.map(function(d){return d.id;});
+    var taken = {}; (interventions||[]).forEach(function(iv){ if(iv.status!=='dropped') taken[iv.action]=1; });
+    function cands(d){
+      var fs = (c.factors && c.factors[d.id]) || [], list = [];
+      fs.forEach(function(fk){ (SUG[d.id][fk]||[]).forEach(function(s){ list.push({need:d.id,factor:fk,t:s.t,load:!!s.load,text:s.text}); }); });
+      if(!list.length) (SUG[d.id]._||[]).forEach(function(s){ list.push({need:d.id,factor:null,t:s.t,load:!!s.load,text:s.text}); });
+      var rank = {self:3,negotiate:2,structural:1};
+      list = list.filter(function(s){return !taken[s.text];});
+      list.forEach(function(s,i){ s.score = rank[s.t] - (out.lowRecovery && s.load ? 2 : 0) - i*0.01; });
+      return list.sort(function(a,b){return b.score-a.score;});
+    }
+    var pools = focus.map(cands), quota = focus.length===1 ? [3] : [2,1], seen = {};
+    pools.forEach(function(pool,i){ var k=0; pool.forEach(function(s){ if(k<quota[i] && !seen[s.text] && out.actions.length<3){ out.actions.push(s); seen[s.text]=1; k++; } }); });
+    pools.forEach(function(pool){ pool.forEach(function(s){ if(out.actions.length<3 && !seen[s.text]){ out.actions.push(s); seen[s.text]=1; } }); });
+    return out;
+  }
+
+  function factorLabels(c,d){ var fs=(c.factors&&c.factors[d.id])||[]; return fs.map(function(k){return d.factors[k]||k;}); }
+
+  function summary(checkins, interventions, profile){
+    var cs = sortC(checkins||[]), n = cs.length; if(!n) return [];
+    var c = cs[n-1], prev = n>1 ? cs[n-2] : null, out = [];
+    var low = DOMAINS.filter(function(d){var v=val(c,d.s);return v!=null && v<=4;}).sort(function(a,b){return val(c,a.s)-val(c,b.s);});
+    var ok = DOMAINS.filter(function(d){var v=val(c,d.s);return v!=null && v>=7;});
+    var mid = DOMAINS.filter(function(d){var v=val(c,d.s);return v!=null && v>=5 && v<=6;});
+    function list(ds){ return ds.map(function(d){return label(d).toLowerCase()+' ('+val(c,d.s)+'/10)';}).join(', ').replace(/, ([^,]*)$/,' and $1'); }
+    if(low.length){
+      var s = cap(list(low))+(low.length>1?' are':' is')+' low this week.';
+      low.forEach(function(d){ var fl = factorLabels(c,d); if(fl.length) s += ' For '+d.name.toLowerCase()+' you named: '+fl.join(', ').toLowerCase()+'.'; });
+      out.push(s);
+    } else out.push('No dimension is in the low range this week.');
+    var rest = [];
+    if(ok.length) rest.push(cap(list(ok))+(ok.length>1?' are':' is')+' high');
+    if(mid.length) rest.push(list(mid)+(mid.length>1?' are':' is')+' moderate');
+    if(rest.length) out.push(cap(rest.join('; '))+'.');
+    var needs = DOMAINS.filter(function(d){return d.kind==='need';});
+    var unassessed = needs.filter(function(d){return val(c,d.f)==null;});
+    var hot = needs.filter(function(d){var v=val(c,d.f);return v!=null && v>=6;});
+    if(unassessed.length===3) out.push('Need frustration has not been assessed, so this check-in cannot yet separate needs that are underfed from needs that are being actively undermined.');
+    else if(hot.length) out.push('Active frustration is high for '+hot.map(function(d){return d.name.toLowerCase()+' ('+val(c,d.f)+'/10)';}).join(' and ')+'. That points to something undermining the need, not only too few chances to meet it.');
+    else if(!unassessed.length) out.push('No need shows high active frustration this week.');
+    var e = val(c,'energy'), r = val(c,'recovery');
+    if(e!=null && r!=null && e-r>=3) out.push('Energy ('+e+'/10) is running ahead of recovery ('+r+'/10). That gap usually means you are drawing on reserves.');
+    if(prev){
+      var moves = DOMAINS.map(function(d){var a=val(c,d.s),b=val(prev,d.s);return (a!=null&&b!=null)?{d:d,ch:a-b}:null;}).filter(function(x){return x && Math.abs(x.ch)>=2;});
+      if(moves.length) out.push('Since the last check-in: '+moves.map(function(x){return label(x.d).toLowerCase()+' '+(x.ch>0?'up ':'down ')+Math.abs(x.ch);}).join(', ')+'.');
+    } else out.push('This is the first check-in, so there is no trend to read yet.');
+    return out;
+  }
+  function cap(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
+
+  function pearson(x,y){
+    var px=[],py=[]; for(var i=0;i<x.length;i++) if(x[i]!=null && y[i]!=null){px.push(x[i]);py.push(y[i]);}
+    var n=px.length; if(n<3) return {n:n,r:null};
+    var mx=mean(px),my=mean(py),sxy=0,sxx=0,syy=0;
+    for(var j=0;j<n;j++){sxy+=(px[j]-mx)*(py[j]-my);sxx+=(px[j]-mx)*(px[j]-mx);syy+=(py[j]-my)*(py[j]-my);}
+    if(!sxx||!syy) return {n:n,r:null};
+    return {n:n,r:sxy/Math.sqrt(sxx*syy)};
+  }
+  function associations(checkins){
+    var cs = sortC(checkins||[]);
+    function S(k){return series(cs,k);}
+    function lag(k1,k2){ var a=S(k1), b=S(k2); return pearson(a.slice(0,-1), b.slice(1)); }
+    return [
+      {q:'Does low autonomy tend to precede low energy?', how:'Autonomy satisfaction one week against energy the next', res:lag('aut_s','energy')},
+      {q:'Does poor recovery coincide with lower competence satisfaction?', how:'Recovery against competence satisfaction, same week', res:pearson(S('recovery'),S('comp_s'))},
+      {q:'Do energy and recovery move together?', how:'Energy against recovery, same week', res:pearson(S('energy'),S('recovery'))},
+      {q:'Does low relatedness tend to precede low energy?', how:'Relatedness satisfaction one week against energy the next', res:lag('rel_s','energy')},
+      {q:'Does competence frustration rise when autonomy falls?', how:'Autonomy satisfaction against competence frustration, same week', res:pearson(S('aut_s'),S('comp_f'))}
+    ];
+  }
+  function monthly(checkins){
+    var cs = sortC(checkins||[]), by = {}, order = [];
+    cs.forEach(function(c){ var m=c.date.slice(0,7); if(!by[m]){by[m]=[];order.push(m);} by[m].push(c); });
+    return order.map(function(m){ var row={month:m,n:by[m].length}; KEYS.forEach(function(k){ var v=series(by[m],k).filter(function(x){return x!=null;}); row[k]=v.length?mean(v):null; }); return row; });
+  }
+  function factorCounts(checkins){
+    var counts = {};
+    (checkins||[]).forEach(function(c){ DOMAINS.forEach(function(d){ factorLabels(c,d).forEach(function(l){ var k=d.id+'|'+l; counts[k]=(counts[k]||0)+1; }); }); });
+    return Object.keys(counts).map(function(k){var p=k.split('|');return {need:p[0],label:p[1],n:counts[k]};}).sort(function(a,b){return b.n-a.n;});
+  }
+  function tagCounts(checkins){
+    var counts = {};
+    (checkins||[]).forEach(function(c){ (c.restored||[]).forEach(function(t){ var k=t.trim().toLowerCase(); if(k) counts[k]=(counts[k]||0)+1; }); });
+    return Object.keys(counts).map(function(k){return {label:k,n:counts[k]};}).sort(function(a,b){return b.n-a.n;});
+  }
+  function areaMap(checkins){
+    var m = {};
+    Object.keys(AREAS).forEach(function(a){ m[a]={aut:[0,0],comp:[0,0],rel:[0,0]}; });
+    (checkins||[]).forEach(function(c){ var ar=c.areas||{}; Object.keys(ar).forEach(function(a){ if(!m[a]) return; ['aut','comp','rel'].forEach(function(nk){ var v=ar[a][nk]; if(v===1) m[a][nk][0]++; else if(v===-1) m[a][nk][1]++; }); }); });
+    return m;
+  }
+  function effect(iv, checkins){
+    var cs = sortC(checkins||[]), d = dom(iv.need); if(!d || !cs.length) return null;
+    if(!iv.started) return {started:false};
+    var before = cs.filter(function(c){return c.date<=iv.started;}), after = cs.filter(function(c){return c.date>iv.started;});
+    var start = before.length ? val(before[before.length-1],d.s) : null;
+    var av = after.map(function(c){return val(c,d.s);}).filter(function(v){return v!=null;});
+    return {started:true, label:label(d), start:start, after:av.slice(0,8), change:(start!=null && av.length)? mean(av.slice(-3))-start : null};
+  }
+  function csv(checkins){
+    var cs = sortC(checkins||[]);
+    function q(s){ s = String(s==null?'':s); return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; }
+    var head = ['date'].concat(KEYS).concat(DOMAINS.map(function(d){return d.id+'_factors';})).concat(DOMAINS.map(function(d){return d.id+'_notes';})).concat(DOMAINS.map(function(d){return d.id+'_reflection';})).concat(['restored']);
+    var rows = cs.map(function(c){
+      return [c.date].concat(KEYS.map(function(k){var v=val(c,k);return v==null?'':v;}))
+        .concat(DOMAINS.map(function(d){return factorLabels(c,d).join('; ');}))
+        .concat(DOMAINS.map(function(d){return (c.notes&&c.notes[d.id])||'';}))
+        .concat(DOMAINS.map(function(d){return (c.reflect&&c.reflect[d.id])||'';}))
+        .concat([(c.restored||[]).join('; ')]).map(q).join(',');
+    });
+    return head.join(',')+'\n'+rows.join('\n')+'\n';
+  }
+  return {DOMAINS:DOMAINS,KEYS:KEYS,KEYNAMES:KEYNAMES,AREAS:AREAS,WORK_AREAS:WORK_AREAS,SUG:SUG,LEVELS:LEVELS,band:band,mean:mean,sortC:sortC,val:val,series:series,dom:dom,label:label,baseline:baseline,analyse:analyse,priorities:priorities,summary:summary,factorLabels:factorLabels,associations:associations,monthly:monthly,factorCounts:factorCounts,tagCounts:tagCounts,areaMap:areaMap,effect:effect,csv:csv};
+})();
+if(typeof module!=='undefined') module.exports = SDD;
+</script>
+
+<script>
+(function(){
+'use strict';
+var D = SDD.DOMAINS, MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+var COLS = ['checkins','interventions','journal','reports'];
+var S = {ready:false, mode:'loading', error:null, view:'overview', checkins:[], interventions:[], journal:[], reports:[],
+         profile:{context:'',baselineWeeks:6,manual:{}}, draft:null, range:'all', sample:null, downloads:null, busy:null, jtext:'', jprompt:'', confirmDelete:false};
+var PROMPTS = ['What made life feel meaningful this week?','When did I feel most like myself?','What drained me disproportionately?','What did I do because I genuinely wanted to?','What did I do because I felt obligated?','What did I enjoy learning?','When did I feel useful?','What am I avoiding?','What do I wish I had more time for?','What would I change about my current circumstances if I had greater freedom?'];
+
+function $(s,r){ return (r||document).querySelector(s); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+function fmt(d){ if(!d) return ''; var p=d.split('-'); return (+p[2])+' '+MONTHS[+p[1]-1]+' '+p[0]; }
+function today(){ var t=new Date(); return t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0'); }
+function clone(o){ return JSON.parse(JSON.stringify(o)); }
+function uid(p){ return p+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function toast(msg){ var t=$('#toast'); t.textContent=msg; t.classList.add('on'); clearTimeout(toast.t); toast.t=setTimeout(function(){t.classList.remove('on');},3200); }
+function timeout(p,ms){ return Promise.race([p,new Promise(function(_,rej){setTimeout(function(){rej({code:'timeout'});},ms);})]); }
+function cs(){ return SDD.sortC(S.checkins); }
+function latest(){ var c=cs(); return c[c.length-1]||null; }
+
+/* ---------- storage: private per-person documents, with a this-device fallback ---------- */
+var Store = {
+  db:null, root:null, uidv:null,
+  init: async function(){
+    try{
+      if(false){
+        var r = await Promise.all([window.claude.use('db'), window.claude.use('user')]);
+        if(r[0] && r[1]){ var id = await r[1].id(); if(id){ this.db=r[0]; this.uidv=id; this.root=r[0].doc('data/users/'+id+'/store'); S.mode='cloud'; } }
+      }
+    }catch(e){}
+    if(!this.db) S.mode='local';
+    await this.load();
+  },
+  load: async function(){
+    S.error=null;
+    if(S.mode==='cloud'){
+      try{
+        var self=this;
+        var snaps = await timeout(Promise.all(COLS.map(function(n){return self.root.collection(n).get();}).concat([this.db.doc('data/users/'+this.uidv+'/profile').get()])),10000);
+        COLS.forEach(function(n,i){ S[n]=snaps[i].docs.map(function(d){var o=clone(d.data());o.id=d.id;return o;}); });
+        var p=snaps[COLS.length]; if(p.exists) S.profile=Object.assign({context:'',baselineWeeks:6,manual:{}},clone(p.data()));
+      }catch(e){ S.error='load'; }
+    } else {
+      COLS.forEach(function(n){ try{ S[n]=JSON.parse(localStorage.getItem('sdd:'+n)||'[]'); }catch(e){ S[n]=[]; } });
+      try{ var pr=JSON.parse(localStorage.getItem('sdd:profile')||'null'); if(pr) S.profile=Object.assign(S.profile,pr); }catch(e){}
+    }
+  },
+  saveLocal: function(n){ try{ localStorage.setItem('sdd:'+n,JSON.stringify(S[n])); }catch(e){} },
+  put: async function(n,id,data){
+    var body=clone(data); delete body.id;
+    if(S.mode==='cloud') await this.root.collection(n).doc(id).set(body);
+    var i=S[n].findIndex(function(x){return x.id===id;}), rec=Object.assign({id:id},body);
+    if(i>=0) S[n][i]=rec; else S[n].push(rec);
+    if(S.mode!=='cloud') this.saveLocal(n);
+  },
+  del: async function(n,id){
+    if(S.mode==='cloud') await this.root.collection(n).doc(id).delete();
+    S[n]=S[n].filter(function(x){return x.id!==id;});
+    if(S.mode!=='cloud') this.saveLocal(n);
+  },
+  putProfile: async function(){
+    if(S.mode==='cloud') await this.db.doc('data/users/'+this.uidv+'/profile').set(clone(S.profile));
+    else { try{ localStorage.setItem('sdd:profile',JSON.stringify(S.profile)); }catch(e){} }
+  },
+  wipe: async function(){
+    for(var k=0;k<COLS.length;k++){ var n=COLS[k], ids=S[n].map(function(x){return x.id;}); for(var j=0;j<ids.length;j++) await this.del(n,ids[j]); }
+    S.profile={context:'',baselineWeeks:6,manual:{}};
+    if(S.mode==='cloud') await this.db.doc('data/users/'+this.uidv+'/profile').delete();
+    else { try{ localStorage.removeItem('sdd:profile'); }catch(e){} }
+  }
+};
+
+/* ---------- charts ---------- */
+function radar(c,prev){
+  var cx=180,cy=132,R=84,n=D.length,out='';
+  function pt(i,v){ var a=(-90+i*360/n)*Math.PI/180, r=R*v/10; return [cx+r*Math.cos(a), cy+r*Math.sin(a)]; }
+  [2,4,6,8,10].forEach(function(g){ out+='<polygon points="'+D.map(function(_,i){return pt(i,g).map(function(x){return x.toFixed(1);}).join(',');}).join(' ')+'" fill="none" stroke="var(--line)" stroke-width="'+(g===10?1.2:.7)+'"/>'; });
+  D.forEach(function(d,i){ var p=pt(i,10); out+='<line x1="'+cx+'" y1="'+cy+'" x2="'+p[0].toFixed(1)+'" y2="'+p[1].toFixed(1)+'" stroke="var(--line)" stroke-width=".7"/>'; });
+  function poly(cc){ return D.map(function(d,i){ var v=SDD.val(cc,d.s); return pt(i,v==null?0:v).map(function(x){return x.toFixed(1);}).join(','); }).join(' '); }
+  if(prev) out+='<polygon points="'+poly(prev)+'" fill="none" stroke="var(--muted)" stroke-width="1.2" stroke-dasharray="3 3"/>';
+  out+='<polygon points="'+poly(c)+'" fill="var(--ink)" fill-opacity=".07" stroke="var(--ink)" stroke-width="1.6" stroke-linejoin="round"/>';
+  D.forEach(function(d,i){
+    var v=SDD.val(c,d.s), p=pt(i,v==null?0:v), l=pt(i,12.6), col=d.kind==='need'?'var(--'+d.id+')':'var(--state)';
+    out+= d.kind==='need' ? '<circle cx="'+p[0].toFixed(1)+'" cy="'+p[1].toFixed(1)+'" r="4.5" fill="'+col+'"/>' : '<rect x="'+(p[0]-4).toFixed(1)+'" y="'+(p[1]-4).toFixed(1)+'" width="8" height="8" fill="var(--bg)" stroke="'+col+'" stroke-width="1.6"/>';
+    var anchor = Math.abs(l[0]-cx)<8?'middle':(l[0]>cx?'start':'end');
+    out+='<text x="'+l[0].toFixed(1)+'" y="'+(l[1]).toFixed(1)+'" text-anchor="'+anchor+'" style="fill:'+col+';font-weight:500">'+d.name+'</text><text class="v" x="'+l[0].toFixed(1)+'" y="'+(l[1]+13).toFixed(1)+'" text-anchor="'+anchor+'">'+(v==null?'–':v)+'</text>';
+  });
+  return '<svg viewBox="0 0 360 270" role="img" aria-label="Radar chart of the five dimensions this week'+(prev?', with last check-in dashed':'')+'">'+out+'</svg>';
+}
+function lineChart(list,ser,marks){
+  var W=640,H=210,l=26,r=40,t=12,b=26,n=list.length;
+  var t0=Date.parse(list[0].date), t1=Date.parse(list[n-1].date), span=Math.max(t1-t0,1);
+  function X(dstr){ return n===1 ? (l+(W-l-r)/2) : l+(W-l-r)*(Date.parse(dstr)-t0)/span; }
+  function Y(v){ return t+(H-t-b)*(1-v/10); }
+  var out='';
+  [0,2,4,6,8,10].forEach(function(g){ out+='<line x1="'+l+'" x2="'+(W-r)+'" y1="'+Y(g)+'" y2="'+Y(g)+'" stroke="var(--line)" stroke-width="'+(g%5===0?1:.5)+'"/>'; if(g%5===0) out+='<text x="'+(l-6)+'" y="'+(Y(g)+4)+'" text-anchor="end">'+g+'</text>'; });
+  (marks||[]).forEach(function(m){ if(m.date>=list[0].date && m.date<=list[n-1].date){ var x=X(m.date); out+='<line x1="'+x+'" x2="'+x+'" y1="'+t+'" y2="'+(H-b)+'" stroke="var(--muted)" stroke-width="1" stroke-dasharray="2 3"/><text x="'+(x+3)+'" y="'+(t+9)+'">action began</text>'; } });
+  out+='<text x="'+X(list[0].date)+'" y="'+(H-7)+'" text-anchor="'+(n===1?'middle':'start')+'">'+fmt(list[0].date)+'</text>';
+  if(n>1) out+='<text x="'+(W-r)+'" y="'+(H-7)+'" text-anchor="end">'+fmt(list[n-1].date)+'</text>';
+  var ends=[];
+  ser.forEach(function(s){
+    var path='',pen=false,last=null;
+    list.forEach(function(c){ var v=SDD.val(c,s.key); if(v==null){pen=false;return;} var x=X(c.date),y=Y(v); path+=(pen?'L':'M')+x.toFixed(1)+' '+y.toFixed(1)+' '; pen=true; last={x:x,y:y,v:v};
+      out+='<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="2.2" fill="'+s.color+'"/>'; });
+    if(path) out+='<path d="'+path+'" fill="none" stroke="'+s.color+'" stroke-width="1.8" stroke-linejoin="round"'+(s.dash?' stroke-dasharray="5 4"':'')+'/>';
+    if(last){ out+='<circle cx="'+last.x.toFixed(1)+'" cy="'+last.y.toFixed(1)+'" r="4" fill="'+s.color+'"/>'; ends.push({y:last.y,x:last.x,v:last.v,color:s.color}); }
+  });
+  ends.sort(function(a,b2){return a.y-b2.y;});
+  for(var i=1;i<ends.length;i++) if(ends[i].y-ends[i-1].y<12) ends[i].y=ends[i-1].y+12;
+  ends.forEach(function(e){ out+='<text class="v" x="'+(e.x+9)+'" y="'+(e.y+4)+'" style="fill:'+e.color+'">'+e.v+'</text>'; });
+  return '<div class="chart"><svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="'+esc(ser.map(function(s){return s.name;}).join(', '))+' over time" style="min-width:420px">'+out+'</svg></div>'+
+    '<div class="legend">'+ser.map(function(s){return '<span><i class="'+(s.dash?'dash':'')+'" style="--c:'+s.color+'"></i>'+esc(s.name)+'</span>';}).join('')+'</div>';
+}
+
+/* ---------- views ---------- */
+function vLoading(){ return '<section><p class="lede">Loading your saved check-ins…</p></section>'; }
+function vError(){ return '<section><h2>Your saved data could not be reached</h2><p class="lede">Nothing has been lost. Check your connection, then try again.</p><button class="primary" data-act="retry">Try again</button></section>'; }
+
+function deltaHtml(cur,prev){
+  if(cur==null) return '';
+  if(prev==null) return '<span>first check-in</span>';
+  var ch=cur-prev; if(!ch) return '<span>no change since last check-in</span>';
+  return '<span class="delta '+(ch>0?'up':'down')+'">'+(ch>0?'▲ ':'▼ ')+Math.abs(ch)+' since last check-in</span>';
+}
+function vOverview(){
+  var list=cs(); if(!list.length) return '<section><h2>No check-ins yet</h2><p class="lede">The first one takes about five minutes. Everything on this page is drawn from what you record.</p><a class="btn primary" href="#check-in">Start the first check-in</a></section>';
+  var c=list[list.length-1], prev=list[list.length-2]||null, A=SDD.analyse(S.checkins,S.interventions,S.profile), L=SDD.LEVELS[A.level], P=SDD.priorities(S.checkins,S.interventions);
+  var flags=[]; D.forEach(function(d){ A.domains[d.id].flags.forEach(function(f){ flags.push(f.text); }); });
+  var h='<section><div class="spread"><h2>Week of '+fmt(c.date)+'</h2><span class="small">Check-in '+list.length+' · <a href="#check-in" data-act="edit" data-id="'+esc(c.id)+'">edit</a></span></div>';
+  h+='<div class="status" data-l="'+A.level+'" style="margin-top:14px"><div class="pips" aria-hidden="true">'+[1,2,3].map(function(i){return '<i class="'+(i<=L.pips?'on':'')+'"></i>';}).join('')+'</div><div><strong>'+L.name+'</strong><div class="small">'+L.text+'</div>'+
+     (flags.length?'<ul>'+flags.map(function(f){return '<li>'+esc(f)+'</li>';}).join('')+'</ul>':'')+
+     (list.length<3?'<p class="small">Based on '+list.length+' check-in'+(list.length>1?'s':'')+'. Trend warnings need at least three.</p>':'')+
+     (A.level==='significant'?'<p class="small">If exhaustion is severe or persistent, or your mood or day-to-day functioning has changed, this tool is no substitute for a clinical assessment.</p>':'')+
+     '</div></div><p class="small">A personal monitoring indicator. It is not a validated burnout classification or a diagnosis.</p></section>';
+
+  h+='<section><h2>Psychological needs</h2><p class="lede">Satisfaction: how far each need was met this week, 0 to 10.</p><div class="stack">';
+  D.filter(function(d){return d.kind==='need';}).forEach(function(d){
+    var v=SDD.val(c,d.s), fl=SDD.factorLabels(c,d);
+    h+='<div class="need" data-d="'+d.id+'"><h3>'+d.name+'</h3><div class="meas"><div class="bar"><i style="width:'+(v==null?0:v*10)+'%"></i></div><span class="num">'+(v==null?'–':v)+'</span></div><div class="meta"><span>'+SDD.band(v)+'</span>'+deltaHtml(v,prev?SDD.val(prev,d.s):null)+'</div>'+(fl.length?'<p class="ctx">Named this week: '+esc(fl.join(' · '))+'</p>':'')+'</div>';
+  });
+  h+='</div></section>';
+
+  h+='<section><div class="grid2"><div><h2>Energy and recovery</h2><p class="lede">Tracked alongside the needs, not part of them.</p><div class="stack">';
+  D.filter(function(d){return d.kind==='state';}).forEach(function(d){
+    var v=SDD.val(c,d.s), fl=SDD.factorLabels(c,d);
+    h+='<div class="need"><h3>'+d.name+'</h3><div class="meas"><div class="bar st"><i style="width:'+(v==null?0:v*10)+'%"></i></div><span class="num">'+(v==null?'–':v)+'</span></div><div class="meta"><span>'+SDD.band(v)+'</span>'+deltaHtml(v,prev?SDD.val(prev,d.s):null)+'</div>'+(fl.length?'<p class="ctx">'+esc(fl.join(' · '))+'</p>':'')+'</div>';
+  });
+  h+='</div></div><div>'+radar(c,prev)+(prev?'<p class="small" style="text-align:center">Dashed outline: previous check-in</p>':'')+'</div></div></section>';
+
+  var needs=D.filter(function(d){return d.kind==='need';}), anyF=needs.some(function(d){return SDD.val(c,d.f)!=null;});
+  h+='<section><h2>Active need frustration</h2><p class="lede">Separate from satisfaction. A need can be underfed without being attacked; frustration measures how far something is actively undermining it.</p>';
+  if(!anyF) h+='<p class="na">Not yet assessed for this week. The scores are left blank, not estimated.</p><p><a class="btn" href="#check-in" data-act="edit" data-id="'+esc(c.id)+'">Add frustration scores</a></p>';
+  else { h+='<div class="stack">'; needs.forEach(function(d){ var v=SDD.val(c,d.f);
+    h+='<div class="need" data-d="'+d.id+'"><h3>'+d.name+'</h3>'+(v==null?'<p class="na">not assessed</p>':'<div class="meas"><div class="bar fr"><i style="width:'+v*10+'%"></i></div><span class="num">'+v+'</span></div><div class="meta"><span>'+SDD.band(v)+' frustration</span>'+deltaHtml(v,prev?SDD.val(prev,d.f):null).replace('up','down_').replace('"delta down"','"delta up"').replace('down_','down')+'</div>')+'</div>'; }); h+='</div>'; }
+  h+='</section>';
+
+  h+='<section><h2>Reading of this week</h2>'+SDD.summary(S.checkins,S.interventions,S.profile).map(function(p){return '<p style="max-width:62ch">'+esc(p)+'</p>';}).join('')+'<p class="small">Generated from your scores by fixed rules. For a fuller analysis, see <a href="#report">Report</a>.</p></section>';
+
+  h+='<section><h2>Priorities this week</h2>';
+  if(!P.actions.length) h+='<p class="lede">Nothing scores low enough to need a targeted action. Keep doing what is working.</p>';
+  else { h+='<p class="lede">At most three, aimed at '+P.focus.map(function(id){return SDD.dom(id).name.toLowerCase();}).join(' and ')+'. Suggestions only; you decide what to take up.</p>'+P.actions.map(sugHtml).join(''); }
+  var act=S.interventions.filter(function(i){return i.status==='active'||i.status==='planned';});
+  if(act.length) h+='<p class="small" style="margin-top:14px">'+act.length+' tracked action'+(act.length>1?'s':'')+' in progress or planned. <a href="#actions">Review</a></p>';
+  h+='</section>';
+  return h;
+}
+function sugHtml(s,i){
+  var d=SDD.dom(s.need), names={self:'I can do this',negotiate:'Needs negotiation',structural:'Structural'};
+  return '<div class="item"><div><span class="tag '+s.t+'">'+names[s.t]+'</span>'+(s.load?'<span class="tag load">Adds load</span>':'')+'<span class="small">'+d.name+(s.factor?' · '+esc(d.factors[s.factor]):'')+'</span></div><p>'+esc(s.text)+'</p>'+
+    (s.load && S._lowRec?'<p class="small">Recovery is low, so this was ranked down. If you take it up, drop something else first.</p>':'')+
+    '<button class="quiet" data-act="adopt" data-i="'+i+'">Track this action</button></div>';
+}
+
+/* check-in */
+function newDraft(existing){
+  if(existing){ var d=clone(existing); d.factors=d.factors||{}; d.notes=d.notes||{}; d.reflect=d.reflect||{}; d.areas=d.areas||{}; d.restored=d.restored||[]; d._edit=true; return d; }
+  var sc={}; SDD.KEYS.forEach(function(k){sc[k]=5;});
+  return {date:today(),scores:sc,factors:{},notes:{},reflect:{},areas:{},restored:[],_edit:false};
+}
+function vCheckin(){
+  if(!S.draft) S.draft=newDraft(null);
+  var dr=S.draft, exists=S.checkins.some(function(c){return c.id===dr.date;}) && !dr._edit;
+  var h='<section><h2>'+(dr._edit?'Edit check-in':'Weekly check-in')+'</h2><p class="lede">About five to ten minutes. Rate the past week from 0 to 10. Context and reflection are optional.</p>'+
+    '<label for="ci-date">Week of</label><input type="date" id="ci-date" value="'+esc(dr.date)+'" style="max-width:200px"'+(dr._edit?' disabled':'')+'>'+
+    (exists?'<div class="notice">A check-in already exists for this date. Saving will replace it.</div>':'')+'</section>';
+  D.forEach(function(d){
+    var v=dr.scores[d.s]; if(v==null) v=5;
+    h+='<section class="need" data-d="'+d.id+'"><h2 style="color:var(--c)">'+d.name+'</h2>'+
+      '<p class="q">'+(d.kind==='need'?'<strong>Satisfaction.</strong> ':'')+esc(d.satQ)+'</p><div class="slider"><input type="range" min="0" max="10" step="1" id="s-'+d.s+'" data-key="'+d.s+'" value="'+v+'" aria-label="'+esc(SDD.KEYNAMES[d.s])+'"><output id="o-'+d.s+'">'+v+'</output></div><div class="scale"><span>0 not at all</span><span>10 completely</span></div>';
+    if(d.f){ var fv=dr.scores[d.f], on=fv!=null;
+      h+='<p class="q"><strong>Frustration.</strong> '+esc(d.frQ)+'</p><div class="slider"><input type="range" min="0" max="10" step="1" id="s-'+d.f+'" data-key="'+d.f+'" value="'+(on?fv:5)+'"'+(on?'':' disabled')+' aria-label="'+esc(SDD.KEYNAMES[d.f])+'"><output id="o-'+d.f+'">'+(on?fv:'–')+'</output></div><div class="scale"><span>0 not at all</span><span>10 constantly</span></div>'+
+         '<label class="check" for="na-'+d.f+'"><input type="checkbox" id="na-'+d.f+'" data-na="'+d.f+'"'+(on?'':' checked')+'>Not assessed this week (left blank, never estimated)</label>'; }
+    var open=((dr.factors[d.id]||[]).length||dr.notes[d.id]||dr.reflect[d.id])?' open':'';
+    h+='<details'+open+'><summary>What contributed? (optional)</summary><div class="chips" style="margin-top:8px">'+Object.keys(d.factors).map(function(k){ var on2=(dr.factors[d.id]||[]).indexOf(k)>=0; return '<button type="button" class="chip" data-act="chip" data-d="'+d.id+'" data-k="'+k+'" aria-pressed="'+on2+'">'+esc(d.factors[k])+'</button>'; }).join('')+'</div>'+
+       '<label for="n-'+d.id+'">Anything the list misses</label><textarea id="n-'+d.id+'" data-note="'+d.id+'">'+esc(dr.notes[d.id]||'')+'</textarea>'+
+       '<label for="r-'+d.id+'">'+esc(d.reflect)+'</label><textarea id="r-'+d.id+'" data-reflect="'+d.id+'">'+esc(dr.reflect[d.id]||'')+'</textarea></details></section>';
+  });
+  h+='<section><h2>What replenished me</h2><p class="lede">Optional. Short tags separated by commas. Over time these show your recurring sources of restoration.</p><input type="text" id="ci-restored" value="'+esc((dr.restored||[]).join(', '))+'" placeholder="e.g. long walk, reading, call with a friend"></section>';
+  var anyArea=Object.keys(dr.areas).length;
+  h+='<section><h2>Where in life?</h2><p class="lede">Optional. Mark where each need was fed (+) or undermined (−) this week. Tap to cycle. Areas are kept separate and never averaged.</p><details'+(anyArea?' open':'')+'><summary>Open the life-area grid</summary><div class="areas" style="margin-top:10px"><span></span><b>A</b><b>C</b><b>R</b>'+
+     Object.keys(SDD.AREAS).map(function(a){ return '<span>'+esc(SDD.AREAS[a])+'</span>'+['aut','comp','rel'].map(function(nk){ var vv=(dr.areas[a]&&dr.areas[a][nk])||0; return '<button type="button" class="tri" data-act="tri" data-a="'+a+'" data-n="'+nk+'" data-v="'+vv+'" aria-label="'+esc(SDD.AREAS[a])+', '+SDD.dom(nk).name+'">'+(vv===1?'+':vv===-1?'−':'·')+'</button>'; }).join(''); }).join('')+'</div></details></section>';
+  h+='<section><div class="row"><button class="primary" data-act="save-checkin">Save check-in</button>'+(dr._edit?'<button class="quiet" data-act="cancel-edit">Cancel</button>':'')+'</div></section>';
+  return h;
+}
+function readDraftFields(){
+  var dr=S.draft; if(!dr) return;
+  var de=$('#ci-date'); if(de && de.value) dr.date=de.value;
+  var re=$('#ci-restored'); if(re) dr.restored=re.value.split(',').map(function(x){return x.trim();}).filter(Boolean);
+}
+
+/* trends */
+function inRange(){
+  var list=cs(); if(S.range==='all'||!list.length) return list;
+  var days={w4:28,m3:92,m6:183,m12:366}[S.range], end=Date.parse(list[list.length-1].date);
+  return list.filter(function(c){return end-Date.parse(c.date)<=days*864e5;});
+}
+function vTrends(){
+  var all=cs(); if(!all.length) return '<section><h2>Trends</h2><p class="lede">Nothing to chart until the first check-in is saved.</p><a class="btn primary" href="#check-in">Start a check-in</a></section>';
+  var list=inRange(), R=[['w4','4 weeks'],['m3','3 months'],['m6','6 months'],['m12','12 months'],['all','All']];
+  var marks=S.interventions.filter(function(i){return i.started;}).map(function(i){return {date:i.started};});
+  var h='<section><h2>Trends</h2><p class="lede">'+list.length+' check-in'+(list.length>1?'s':'')+' in view. Missing weeks stay missing; nothing is interpolated.</p><div class="chips">'+R.map(function(r){return '<button class="chip" data-act="range" data-r="'+r[0]+'" aria-pressed="'+(S.range===r[0])+'">'+r[1]+'</button>';}).join('')+'</div>'+(list.length<2?'<div class="notice">One check-in so far. Lines appear from the second.</div>':'')+'</section>';
+  h+='<section><h3>Need satisfaction</h3>'+lineChart(list,[{key:'aut_s',name:'Autonomy',color:'var(--aut)'},{key:'comp_s',name:'Competence',color:'var(--comp)'},{key:'rel_s',name:'Relatedness',color:'var(--rel)'}],marks)+'</section>';
+  var anyF=list.some(function(c){return SDD.val(c,'aut_f')!=null||SDD.val(c,'comp_f')!=null||SDD.val(c,'rel_f')!=null;});
+  h+='<section><h3>Need frustration</h3>'+(anyF?lineChart(list,[{key:'aut_f',name:'Autonomy',color:'var(--aut)',dash:true},{key:'comp_f',name:'Competence',color:'var(--comp)',dash:true},{key:'rel_f',name:'Relatedness',color:'var(--rel)',dash:true}],marks):'<p class="na">No frustration scores recorded in this period.</p>')+'</section>';
+  h+='<section><h3>Energy against recovery</h3>'+lineChart(list,[{key:'energy',name:'Energy',color:'var(--state)'},{key:'recovery',name:'Recovery',color:'var(--muted)',dash:true}],marks)+'</section>';
+
+  var mo=SDD.monthly(list);
+  h+='<section><h3>Monthly averages</h3><div class="scroll"><table><thead><tr><th>Month</th><th>n</th><th>A sat</th><th>A fr</th><th>C sat</th><th>C fr</th><th>R sat</th><th>R fr</th><th>Energy</th><th>Recov.</th></tr></thead><tbody>'+mo.map(function(m){ var p=m.month.split('-'); return '<tr><td>'+MONTHS[+p[1]-1]+' '+p[0]+'</td><td>'+m.n+'</td>'+SDD.KEYS.map(function(k){return '<td>'+(m[k]==null?'–':m[k].toFixed(1))+'</td>';}).join('')+'</tr>'; }).join('')+'</tbody></table></div></section>';
+
+  var fc=SDD.factorCounts(list).slice(0,10), max=fc.length?fc[0].n:1;
+  h+='<section><h3>Recurrent sources of depletion</h3>'+(fc.length?fc.map(function(f){ var d=SDD.dom(f.need); return '<div class="hbar need" data-d="'+f.need+'"><span>'+esc(f.label)+' <span class="small">· '+d.name+'</span></span><div class="bar'+(d.kind==='state'?' st':'')+'"><i style="width:'+(100*f.n/max)+'%"></i></div><span class="num">'+f.n+'</span></div>'; }).join('')+'<p class="small">Count of check-ins in which you named each factor.</p>':'<p class="na">No contributing factors recorded in this period.</p>')+'</section>';
+  var tc=SDD.tagCounts(list).slice(0,8), tmax=tc.length?tc[0].n:1;
+  h+='<section><h3>Recurrent sources of restoration</h3>'+(tc.length?tc.map(function(f){ return '<div class="hbar need"><span>'+esc(f.label)+'</span><div class="bar st"><i style="width:'+(100*f.n/tmax)+'%"></i></div><span class="num">'+f.n+'</span></div>'; }).join(''):'<p class="na">Nothing recorded yet under "What replenished me".</p>')+'</section>';
+
+  var am=SDD.areaMap(list), anyA=Object.keys(am).some(function(a){return ['aut','comp','rel'].some(function(n){return am[a][n][0]+am[a][n][1]>0;});});
+  h+='<section><h3>Needs by life area</h3>';
+  if(!anyA) h+='<p class="na">No life-area marks recorded yet. Use the grid at the end of the check-in.</p>';
+  else { function cell(x){ return (x[0]||x[1]) ? '<span style="color:var(--ok)">+'+x[0]+'</span> <span style="color:var(--attn)">−'+x[1]+'</span>' : '·'; }
+    var tot={w:{aut:[0,0],comp:[0,0],rel:[0,0]},o:{aut:[0,0],comp:[0,0],rel:[0,0]}};
+    Object.keys(am).forEach(function(a){ var g=SDD.WORK_AREAS.indexOf(a)>=0?'w':'o'; ['aut','comp','rel'].forEach(function(n){tot[g][n][0]+=am[a][n][0];tot[g][n][1]+=am[a][n][1];}); });
+    h+='<div class="scroll"><table><thead><tr><th>Area</th><th>Autonomy</th><th>Competence</th><th>Relatedness</th></tr></thead><tbody>'+Object.keys(am).map(function(a){return '<tr><td>'+esc(SDD.AREAS[a])+'</td><td>'+cell(am[a].aut)+'</td><td>'+cell(am[a].comp)+'</td><td>'+cell(am[a].rel)+'</td></tr>';}).join('')+
+      '<tr><td><strong>Work areas</strong></td><td>'+cell(tot.w.aut)+'</td><td>'+cell(tot.w.comp)+'</td><td>'+cell(tot.w.rel)+'</td></tr><tr><td><strong>Outside work</strong></td><td>'+cell(tot.o.aut)+'</td><td>'+cell(tot.o.comp)+'</td><td>'+cell(tot.o.rel)+'</td></tr></tbody></table></div><p class="small">Weeks in which each area fed (+) or undermined (−) a need.</p>'; }
+  h+='</section>';
+
+  h+='<section><h3>Associations</h3><p class="lede">Descriptive only. A correlation here says two things moved together in your data. It does not say one caused the other.</p>';
+  SDD.associations(list).forEach(function(a){ var ok=a.res.n>=8 && a.res.r!=null;
+    h+='<div class="item"><p><strong>'+esc(a.q)+'</strong></p><p class="small">'+esc(a.how)+'</p>'+(ok?'<p><span class="num">r = '+a.res.r.toFixed(2)+'</span> <span class="small">across '+a.res.n+' paired weeks · '+(Math.abs(a.res.r)<.3?'little or no relationship':(Math.abs(a.res.r)<.6?'moderate':'strong')+(a.res.r>0?' positive':' negative')+' association')+'</span></p>':'<p class="na">Needs 8 paired weeks; you have '+a.res.n+'.</p>')+'</div>'; });
+  h+='</section>';
+
+  h+='<section><h3>All check-ins</h3><div class="scroll"><table><thead><tr><th>Week of</th><th>A</th><th>C</th><th>R</th><th>En</th><th>Rec</th><th></th></tr></thead><tbody>'+all.slice().reverse().map(function(c){return '<tr><td>'+fmt(c.date)+'</td>'+['aut_s','comp_s','rel_s','energy','recovery'].map(function(k){var v=SDD.val(c,k);return '<td>'+(v==null?'–':v)+'</td>';}).join('')+'<td><a href="#check-in" data-act="edit" data-id="'+esc(c.id)+'">edit</a> · <a href="#trends" data-act="del-checkin" data-id="'+esc(c.id)+'">'+(S.confirmDelete===c.id?'confirm delete':'delete')+'</a></td></tr>';}).join('')+'</tbody></table></div></section>';
+  return h;
+}
+
+/* actions */
+function vActions(){
+  var P=SDD.priorities(S.checkins,S.interventions), c=latest(), rec=c?SDD.val(c,'recovery'):null;
+  var h='<section><h2>Suggested this week</h2>';
+  if(!c) h+='<p class="lede">Suggestions appear after the first check-in.</p>';
+  else if(!P.actions.length) h+='<p class="lede">No dimension is low enough to call for a targeted action.</p>';
+  else h+='<p class="lede">Chosen from your lowest dimensions and the factors you named, ranked by severity, persistence, active frustration and feasibility. Anything that adds workload is ranked down while recovery is low.</p>'+P.actions.map(sugHtml).join('');
+  h+='</section><section><h2>Tracked actions</h2><p class="lede">Finishing an action does not prove it helped. Judge it by what the target need does afterwards.</p>';
+  var list=S.interventions.slice().sort(function(a,b){return (b.created||'').localeCompare(a.created||'');});
+  if(!list.length) h+='<p class="na">Nothing tracked yet.</p>';
+  list.forEach(function(iv){
+    var d=SDD.dom(iv.need)||D[0], ef=SDD.effect(iv,S.checkins), id=esc(iv.id);
+    h+='<div class="item need" data-d="'+d.id+'"><div class="spread"><h3>'+esc(iv.action)+'</h3><span class="small">'+d.name+'</span></div>'+
+      (iv.problem?'<p class="small"><strong>Problem:</strong> '+esc(iv.problem)+'</p>':'')+(iv.expected?'<p class="small"><strong>Expected:</strong> '+esc(iv.expected)+'</p>':'')+
+      (iv.addsLoad && rec!=null && rec<=4 && iv.status!=='done' && iv.status!=='dropped'?'<div class="notice">This adds to your load while recovery is low ('+rec+'/10). Keep it small, or drop something else to make room.</div>':'');
+    if(ef){ if(!ef.started) h+='<p class="small">Not started. Set a start date to begin comparing.</p>';
+      else h+='<p class="small"><strong>'+esc(ef.label)+':</strong> '+(ef.start==null?'no score at start':ef.start+'/10 at start')+(ef.after.length?' → '+ef.after.join(', ')+' since':' · no check-ins since yet')+(ef.change!=null?' <span class="num">('+(ef.change>0?'+':'')+ef.change.toFixed(1)+')</span>':'')+'. An association, not proof of effect.</p>'; }
+    h+='<details><summary>Update</summary><div class="grid2"><div><label for="st-'+id+'">Status</label><select id="st-'+id+'">'+['planned','active','done','dropped'].map(function(s){return '<option'+(iv.status===s?' selected':'')+'>'+s+'</option>';}).join('')+'</select></div><div><label for="sd-'+id+'">Date started</label><input type="date" id="sd-'+id+'" value="'+esc(iv.started||'')+'"></div>'+
+      '<div><label for="df-'+id+'">Difficulty</label><select id="df-'+id+'">'+['','easy','manageable','hard','unsustainable'].map(function(s){return '<option'+(iv.difficulty===s?' selected':'')+'>'+s+'</option>';}).join('')+'</select></div><div><label for="hp-'+id+'">Was it helpful?</label><select id="hp-'+id+'">'+['','yes','somewhat','no','too early to say'].map(function(s){return '<option'+(iv.helpful===s?' selected':'')+'>'+s+'</option>';}).join('')+'</select></div></div>'+
+      '<label for="se-'+id+'">Unintended consequences, including new pressure</label><textarea id="se-'+id+'">'+esc(iv.sideEffects||'')+'</textarea><label class="check" for="ld-'+id+'"><input type="checkbox" id="ld-'+id+'"'+(iv.addsLoad?' checked':'')+'>This adds to my workload</label>'+
+      '<div class="row" style="margin-top:12px"><button class="primary" data-act="save-iv" data-id="'+id+'">Save</button><button class="quiet danger" data-act="del-iv" data-id="'+id+'">'+(S.confirmDelete===iv.id?'Confirm delete':'Delete')+'</button></div></details></div>';
+  });
+  h+='</section><section><h2>Add your own</h2><label for="iv-need">Dimension addressed</label><select id="iv-need">'+D.map(function(d){return '<option value="'+d.id+'">'+d.name+'</option>';}).join('')+'</select><label for="iv-problem">Underlying problem</label><input type="text" id="iv-problem"><label for="iv-action">Proposed action</label><input type="text" id="iv-action"><label for="iv-expected">Expected outcome</label><input type="text" id="iv-expected"><label class="check" for="iv-load"><input type="checkbox" id="iv-load">This adds to my workload</label><p><button class="primary" data-act="add-iv">Track this action</button></p></section>';
+  return h;
+}
+
+/* journal */
+function vJournal(){
+  var h='<section><h2>Journal</h2><p class="lede">Free writing. A prompt is optional.</p><label for="j-prompt">Prompt</label><select id="j-prompt"><option value="">No prompt</option>'+PROMPTS.map(function(p){return '<option'+(S.jprompt===p?' selected':'')+'>'+esc(p)+'</option>';}).join('')+'</select><label for="j-text">Entry</label><textarea id="j-text" style="min-height:140px">'+esc(S.jtext)+'</textarea><p><button class="primary" data-act="add-journal">Save entry</button></p></section>';
+  var list=S.journal.slice().sort(function(a,b){return (b.created||'').localeCompare(a.created||'');});
+  var th=S.reports.find(function(r){return r.id==='themes';});
+  h+='<section><h2>Recurring themes</h2><p class="lede">Theme analysis needs an AI model, which this standalone copy does not use.</p>'+
+     (S.sample?'<button data-act="themes"'+(list.length<3||S.busy?' disabled':'')+'>'+(S.busy==='themes'?'Reading…':'Look for themes')+'</button>'+(list.length<3?'<p class="small">Needs at least three entries; you have '+list.length+'.</p>':''):'')+
+     '<div class="report" id="themes-out">'+(th?md(th.text)+'<p class="small">Generated '+fmt((th.created||'').slice(0,10))+'. Interpretations are tentative.</p>':'')+'</div></section>';
+  h+='<section><h2>Entries</h2>'+(list.length?list.map(function(j){return '<div class="item"><div class="spread"><span class="small">'+fmt((j.created||'').slice(0,10))+'</span><a class="small" href="#journal" data-act="del-journal" data-id="'+esc(j.id)+'">'+(S.confirmDelete===j.id?'confirm delete':'delete')+'</a></div>'+(j.prompt?'<p class="small"><em>'+esc(j.prompt)+'</em></p>':'')+'<p style="white-space:pre-wrap;max-width:62ch">'+esc(j.text)+'</p></div>';}).join(''):'<p class="na">No entries yet.</p>')+'</section>';
+  return h;
+}
+
+/* report */
+function md(text){
+  var out='',inList=false;
+  String(text||'').split(/\r?\n/).forEach(function(line){
+    var l=line.trim(); if(!l){ if(inList){out+='</ul>';inList=false;} return; }
+    var t=esc(l.replace(/^#+\s*/,'').replace(/^[-*]\s+/,'')).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+    if(/^#+\s/.test(l)){ if(inList){out+='</ul>';inList=false;} out+='<h3>'+t+'</h3>'; }
+    else if(/^[-*]\s+/.test(l)){ if(!inList){out+='<ul>';inList=true;} out+='<li>'+t+'</li>'; }
+    else { if(inList){out+='</ul>';inList=false;} out+='<p>'+t+'</p>'; }
+  });
+  if(inList) out+='</ul>'; return out;
+}
+function plainReport(){
+  var c=latest(); if(!c) return '';
+  var A=SDD.analyse(S.checkins,S.interventions,S.profile), P=SDD.priorities(S.checkins,S.interventions), L=SDD.LEVELS[A.level], t='';
+  t+='## Snapshot\n'+SDD.KEYS.map(function(k){var v=SDD.val(c,k);return '- '+SDD.KEYNAMES[k]+': '+(v==null?'not assessed':v+'/10 ('+SDD.band(v)+')');}).join('\n')+'\n\n';
+  t+='## Reading\n'+SDD.summary(S.checkins,S.interventions,S.profile).join('\n\n')+'\n\n';
+  t+='## Monitoring level\n'+L.name+'. '+L.text+'\n'; D.forEach(function(d){A.domains[d.id].flags.forEach(function(f){t+='- '+f.text+'\n';});});
+  t+='\n## Suggested actions\n'+(P.actions.length?P.actions.map(function(s){return '- ('+s.t+') '+s.text;}).join('\n'):'None needed this week.')+'\n';
+  return t;
+}
+function reportPayload(withJournal){
+  var list=cs().slice(-12);
+  var data={latest_week:list[list.length-1].date, checkins:list.map(function(c){ var o={date:c.date,scores:{},factors:{},notes:c.notes||{},reflections:c.reflect||{},restored:c.restored||[],life_areas:c.areas||{}}; SDD.KEYS.forEach(function(k){o.scores[SDD.KEYNAMES[k]]=SDD.val(c,k);}); D.forEach(function(d){var fl=SDD.factorLabels(c,d); if(fl.length) o.factors[d.name]=fl;}); return o; }),
+    tracked_actions:S.interventions.map(function(i){return {need:i.need,problem:i.problem,action:i.action,expected:i.expected,status:i.status,started:i.started||null,difficulty:i.difficulty||null,helpful:i.helpful||null,unintended:i.sideEffects||null,adds_load:!!i.addsLoad};}),
+    rule_based_level:SDD.LEVELS[SDD.analyse(S.checkins,S.interventions,S.profile).level].name};
+  if(withJournal) data.journal=S.journal.slice().sort(function(a,b){return (b.created||'').localeCompare(a.created||'');}).slice(0,8).map(function(j){return {date:(j.created||'').slice(0,10),prompt:j.prompt||null,text:j.text};});
+  return data;
+}
+var REPORT_RULES = 'You are writing a weekly report for one person\'s private self-monitoring tool built on Self-Determination Theory (autonomy, competence, relatedness, each with separate satisfaction and frustration scores), plus energy and recovery as complementary dimensions. Scores are 0-10; null means not assessed, so never estimate it.\n\nRules:\n- Be analytical, specific and candid. No generic motivational statements, no reassurance for its own sake.\n- Never diagnose, and never infer depression, mania or any psychiatric condition from the scores.\n- Never present correlation as causation. Separate what the data shows from what you infer, and mark inferences as tentative.\n- Low perceived competence says nothing certain about actual ability.\n- Being single is not itself a relatedness deficit. Rest is not laziness.\n- Do not frame institutional, financial or structural problems as personal failings; say plainly when a problem is structural and may not be individually solvable.\n- Recommend at most three actions, each realistic for someone with limited money, limited transport and a full schedule. Label each (self), (negotiate) or (structural). When recovery is low, do not add workload: prefer removing or reshaping commitments.\n- Suggestions stay suggestions; the person decides.\n- If the data shows severe, persistent exhaustion or functional decline, say that a clinical assessment is appropriate and that this tool does not replace one.\n\nFormat: exactly these eight sections, each starting with a line "## " then the title: 1. Psychological needs snapshot; 2. What is going well; 3. What is deteriorating; 4. What might explain the changes; 5. What needs attention (the two most important needs); 6. Recommended actions; 7. Questions for reflection (one or two); 8. Longitudinal observations. Short paragraphs or "- " bullets. No other markdown. Under 500 words. With a single check-in, say there is no trend yet.';
+function vReport(){
+  var c=latest(); if(!c) return '<section><h2>Weekly report</h2><p class="lede">A report needs at least one check-in.</p><a class="btn primary" href="#check-in">Start a check-in</a></section>';
+  var rep=S.reports.find(function(r){return r.id===c.date;});
+  var h='<section><h2>Weekly report</h2><p class="lede">Week of '+fmt(c.date)+'.</p>';
+  if(S.sample){ h+='<div class="notice" style="border-left-color:var(--aut)">Pressing the button sends Claude your last twelve check-ins (scores, factors and notes), your tracked actions and your About-me text from the Data tab. Journal entries go only if you tick the box. Nothing is sent before you press it.</div><label class="check" for="rp-journal"><input type="checkbox" id="rp-journal">Include my eight most recent journal entries</label><p><button class="primary" data-act="report"'+(S.busy?' disabled':'')+'>'+(S.busy==='report'?'Writing…':(rep?'Write it again':'Write this week\'s report'))+'</button></p>'; }
+  else h+='<div class="notice">This standalone copy has no AI-written report. The rule-based summary below is computed on your device.</div>';
+  h+='<div class="report" id="report-out">'+(rep?md(rep.text)+'<p class="small">Written by Claude on '+fmt((rep.created||'').slice(0,10))+'. An interpretation, not a clinical opinion.</p>':'')+'</div></section>';
+  h+='<section><h2>Rule-based summary</h2><p class="lede">Computed on this page from fixed rules. Always available.</p><div class="report">'+md(plainReport())+'</div></section>';
+  var old=S.reports.filter(function(r){return r.id!=='themes' && r.id!==c.date;}).sort(function(a,b){return b.id.localeCompare(a.id);});
+  if(old.length) h+='<section><h2>Earlier reports</h2>'+old.map(function(r){return '<details><summary>Week of '+fmt(r.id)+'</summary><div class="report">'+md(r.text)+'</div></details>';}).join('')+'</section>';
+  return h;
+}
+
+/* data */
+function vData(){
+  var p=S.profile, dl=true;
+  var h='<section><h2>Export</h2><p class="lede">Entries live only in this browser, so a backup file is your safety net. Download everything after each check-in.</p><div class="row"><button data-act="exp-csv">'+(dl?'Download':'Copy')+' check-ins (CSV)</button><button data-act="exp-json">'+(dl?'Download':'Copy')+' everything (JSON)</button>'+(dl?'<button data-act="exp-pdf">Download this week\'s report (PDF)</button>':'')+'</div>'+(dl?'':'<p class="small">File downloads are not available in this view, so exports are copied to the clipboard.</p>')+'</section>';
+  h+='<section><h2>Restore from a backup</h2><p class="lede">Choose a JSON file exported from this dashboard. Entries in the file are added to this browser; where an entry exists in both, the file wins.</p><label for="imp-file">Backup file</label><input type="file" id="imp-file" accept=".json,application/json"></section>';
+  h+='<section><h2>Where your data lives</h2><p style="max-width:62ch">'+(S.mode==='cloud'?'Check-ins, actions, journal entries and reports are stored in a private area of this page\'s database that is tied to your Claude account. It follows you across devices. Other people cannot read it, including anyone you later share this page with.':'Everything you record is kept in this browser on this device. It is not uploaded anywhere and will not appear on other devices. Clearing the browser data for this site deletes it, and Safari can clear it after a period without visits unless the page is on your Home Screen.')+'</p><p style="max-width:62ch">This standalone copy has no AI features and sends your entries to no service. The fonts and the PDF library load from public CDNs when you are online; they receive none of your entries.</p></section>';
+  h+='<section><h2>About me</h2><p class="lede">Your own notes on your circumstances. Kept with your backup; not sent anywhere.</p><label for="pf-context">Context</label><textarea id="pf-context" style="min-height:160px">'+esc(p.context||'')+'</textarea>'+
+     '<h4>Personal baseline</h4><p class="small">After this many check-ins, each dimension\'s early average becomes your baseline, and two weeks well below it raises a warning.</p><label for="pf-weeks">Observation period (check-ins)</label><input type="number" id="pf-weeks" min="3" max="26" value="'+(+p.baselineWeeks||6)+'" style="max-width:120px">'+
+     '<details><summary>Set baselines by hand</summary><div class="grid2">'+D.map(function(d){ var b=SDD.baseline(cs(),d.s,p); return '<div><label for="bl-'+d.s+'">'+esc(SDD.label(d))+'</label><input type="number" min="0" max="10" step="0.5" id="bl-'+d.s+'" value="'+esc((p.manual&&p.manual[d.s]!=null)?p.manual[d.s]:'')+'" placeholder="'+(b?b.value.toFixed(1)+' (computed)':'not yet set')+'"></div>'; }).join('')+'</div></details><p><button class="primary" data-act="save-profile">Save</button></p></section>';
+  h+='<section><h2>Delete everything</h2><p class="lede">Removes every check-in, action, journal entry, report and your About-me text. This cannot be undone. Export first if you want a copy.</p>'+(S.confirmDelete==='all'?'<div class="row"><button class="danger" data-act="wipe-yes">Yes, delete all my data</button><button class="quiet" data-act="wipe-no">Keep it</button></div>':'<button class="danger" data-act="wipe">Delete all my data</button>')+'</section>';
+  h+='<section><p class="small" style="max-width:62ch">Built on Self-Determination Theory (Deci and Ryan). The scales, bands and warning levels are provisional personal tracking conventions. They are not validated instruments and do not diagnose anything.</p></section>';
+  return h;
+}
+
+/* ---------- render and routing ---------- */
+var VIEWS = {overview:vOverview,'check-in':vCheckin,trends:vTrends,actions:vActions,journal:vJournal,report:vReport,data:vData};
+function route(){ var h=(location.hash||'').slice(1); S.view=VIEWS[h]?h:'overview'; }
+function render(){
+  document.querySelectorAll('nav.tabs a').forEach(function(a){ if(a.getAttribute('href')==='#'+S.view) a.setAttribute('aria-current','page'); else a.removeAttribute('aria-current'); });
+  var c=latest(), r=c?SDD.val(c,'recovery'):null; S._lowRec = r!=null && r<=4;
+  $('#notice').innerHTML = (S.ready && S.mode==='local') ? '<div class="notice">Saved in this browser only. Download a backup from the Data tab after each check-in.</div>' : '';
+  $('#view').innerHTML = !S.ready ? vLoading() : (S.error ? vError() : VIEWS[S.view]());
+}
+function go(v){ if(location.hash==='#'+v){ route(); render(); window.scrollTo(0,0); } else location.hash=v; }
+window.addEventListener('hashchange',function(){ if(S.view==='check-in') readDraftFields(); if(S.view==='journal'){ var jt=$('#j-text'); if(jt) S.jtext=jt.value; } S.confirmDelete=false; route(); render(); window.scrollTo(0,0); });
+
+async function guard(fn,okMsg){
+  try{ await fn(); if(okMsg) toast(okMsg); return true; }
+  catch(e){ toast(e && e.code==='quota_exceeded' ? 'Storage is full. Export, then delete old entries.' : 'Could not save. Check your connection and try again.'); return false; }
+}
+async function exportFile(name,data){
+  if(S.downloads){ try{ await S.downloads.save({filename:name,data:data}); toast('Saved '+name); }catch(e){ if(!e||e.code!=='declined') toast('The file could not be saved.'); } }
+  else { try{ var types={csv:'text/csv',json:'application/json',pdf:'application/pdf',md:'text/markdown'}, blob=new Blob([data],{type:types[name.split('.').pop()]||'application/octet-stream'}), url=URL.createObjectURL(blob), a=document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function(){URL.revokeObjectURL(url);},4000); toast('Saved '+name); }catch(e){ toast('The file could not be saved.'); } }
+}
+function ascii(s){ return String(s).replace(/[‘’]/g,"'").replace(/[“”]/g,'"').replace(/[–—−]/g,'-').replace(/→/g,'->').replace(/·/g,'-').replace(/[^\x09\x0A\x0D\x20-\x7E -ÿ]/g,''); }
+function makePdf(){
+  var J=window.jspdf && window.jspdf.jsPDF; if(!J) return null;
+  var c=latest(), doc=new J({unit:'mm',format:'a4'}), y=20, rep=S.reports.find(function(r){return r.id===c.date;});
+  function line(t,size,style,gap){ doc.setFont('helvetica',style||'normal'); doc.setFontSize(size||10.5); doc.splitTextToSize(ascii(t),170).forEach(function(l){ if(y>280){doc.addPage();y=20;} doc.text(l,20,y); y+=(size||10.5)*0.45; }); y+=(gap==null?2:gap); }
+  line('The Self-Determination Dashboard',18,'bold',1); line('Week of '+fmt(c.date)+' - experimental personal monitoring tool, not a diagnostic instrument',9,'italic',5);
+  (plainReport()+(rep?'\n## Report written by Claude\n'+rep.text:'')).split('\n').forEach(function(l){ l=l.trim(); if(!l){y+=1.5;return;} if(/^#+\s/.test(l)){ y+=3; line(l.replace(/^#+\s*/,''),12.5,'bold',1.5); } else line(l.replace(/\*\*/g,''),10.5,'normal',1); });
+  return doc.output('arraybuffer');
+}
+
+document.addEventListener('input',function(e){
+  var t=e.target, dr=S.draft;
+  if(t.dataset.key && dr){ dr.scores[t.dataset.key]=+t.value; var o=$('#o-'+t.dataset.key); if(o) o.textContent=t.value; }
+  else if(t.dataset.note && dr) dr.notes[t.dataset.note]=t.value;
+  else if(t.dataset.reflect && dr) dr.reflect[t.dataset.reflect]=t.value;
+  else if(t.id==='j-text') S.jtext=t.value;
+});
+document.addEventListener('change',function(e){
+  var t=e.target, dr=S.draft;
+  if(t.dataset.na && dr){ var k=t.dataset.na, sl=$('#s-'+k), o=$('#o-'+k); if(t.checked){ dr.scores[k]=null; sl.disabled=true; o.textContent='–'; } else { dr.scores[k]=+sl.value; sl.disabled=false; o.textContent=sl.value; } }
+  else if(t.id==='ci-date' && dr){ dr.date=t.value; readDraftFields(); render(); }
+  else if(t.id==='j-prompt') S.jprompt=t.value;
+  else if(t.id==='imp-file' && t.files && t.files[0]){
+    var rd=new FileReader();
+    rd.onload=function(){
+      try{
+        var d=JSON.parse(rd.result), n=0; if(!d || typeof d!=='object') throw 0;
+        COLS.forEach(function(c){ if(!Array.isArray(d[c])) return; d[c].forEach(function(x){ if(!x || typeof x!=='object') return; var id=x.id||(c==='checkins'?x.date:null); if(!id) return; if(c==='checkins' && (!x.date || !x.scores)) return; var rec=Object.assign({},x,{id:id}), i=S[c].findIndex(function(y){return y.id===id;}); if(i>=0) S[c][i]=rec; else S[c].push(rec); n++; }); Store.saveLocal(c); });
+        if(d.profile && typeof d.profile==='object'){ S.profile=Object.assign({context:'',baselineWeeks:6,manual:{}},d.profile); Store.putProfile(); }
+        toast(n?'Restored '+n+' entries':'No entries found in that file'); render();
+      }catch(err){ toast('That file is not a dashboard backup.'); }
+    };
+    rd.readAsText(t.files[0]);
+  }
+});
+document.addEventListener('click',async function(e){
+  var b=e.target.closest('[data-act]'); if(!b) return; var act=b.dataset.act, id=b.dataset.id;
+  if(act==='retry'){ S.ready=false; render(); await Store.load(); S.ready=true; render(); }
+  else if(act==='edit'){ var ex=S.checkins.find(function(c){return c.id===id;}); if(ex){ S.draft=newDraft(ex); if(S.view==='check-in'){ e.preventDefault(); render(); window.scrollTo(0,0); } } }
+  else if(act==='cancel-edit'){ S.draft=null; go('overview'); }
+  else if(act==='chip'){ var dr=S.draft, d=b.dataset.d, k=b.dataset.k, arr=dr.factors[d]||(dr.factors[d]=[]), i=arr.indexOf(k); if(i>=0) arr.splice(i,1); else arr.push(k); b.setAttribute('aria-pressed',i<0); }
+  else if(act==='tri'){ var a=b.dataset.a, n=b.dataset.n, cur=+b.dataset.v, nx=cur===0?1:cur===1?-1:0, ar=S.draft.areas; ar[a]=ar[a]||{}; if(nx) ar[a][n]=nx; else { delete ar[a][n]; if(!Object.keys(ar[a]).length) delete ar[a]; } b.dataset.v=nx; b.textContent=nx===1?'+':nx===-1?'−':'·'; }
+  else if(act==='save-checkin'){ readDraftFields(); var dr2=S.draft; if(!/^\d{4}-\d{2}-\d{2}$/.test(dr2.date||'')){ toast('Choose a date for this check-in.'); return; }
+    var rec={date:dr2.date,scores:dr2.scores,factors:dr2.factors,notes:dr2.notes,reflect:dr2.reflect,areas:dr2.areas,restored:dr2.restored,updated:new Date().toISOString()};
+    b.disabled=true; if(await guard(function(){return Store.put('checkins',dr2.date,rec);},'Check-in saved')){ S.draft=null; go('overview'); } else b.disabled=false; }
+  else if(act==='del-checkin'){ e.preventDefault(); if(S.confirmDelete!==id){ S.confirmDelete=id; render(); return; } S.confirmDelete=false; await guard(function(){return Store.del('checkins',id);},'Check-in deleted'); render(); }
+  else if(act==='range'){ S.range=b.dataset.r; render(); }
+  else if(act==='adopt'){ var s=SDD.priorities(S.checkins,S.interventions).actions[+b.dataset.i]; if(!s) return; var d2=SDD.dom(s.need), nid=uid('i');
+    await guard(function(){return Store.put('interventions',nid,{need:s.need,problem:s.factor?d2.factors[s.factor]:'Low '+SDD.label(d2).toLowerCase(),action:s.text,expected:'Higher '+SDD.label(d2).toLowerCase()+' in the following check-ins',status:'planned',started:'',kind:s.t,addsLoad:!!s.load,created:new Date().toISOString()});},'Added to tracked actions'); render(); }
+  else if(act==='add-iv'){ var action=$('#iv-action').value.trim(); if(!action){ toast('Describe the action first.'); return; } var nid2=uid('i');
+    await guard(function(){return Store.put('interventions',nid2,{need:$('#iv-need').value,problem:$('#iv-problem').value.trim(),action:action,expected:$('#iv-expected').value.trim(),status:'planned',started:'',addsLoad:$('#iv-load').checked,created:new Date().toISOString()});},'Action tracked'); render(); }
+  else if(act==='save-iv'){ var iv=S.interventions.find(function(x){return x.id===id;}); if(!iv) return; var up=Object.assign({},iv,{status:$('#st-'+id).value,started:$('#sd-'+id).value,difficulty:$('#df-'+id).value,helpful:$('#hp-'+id).value,sideEffects:$('#se-'+id).value,addsLoad:$('#ld-'+id).checked});
+    if(up.status==='active' && !up.started) up.started=today(); await guard(function(){return Store.put('interventions',id,up);},'Saved'); render(); }
+  else if(act==='del-iv'){ if(S.confirmDelete!==id){ S.confirmDelete=id; b.textContent='Confirm delete'; return; } S.confirmDelete=false; await guard(function(){return Store.del('interventions',id);},'Deleted'); render(); }
+  else if(act==='add-journal'){ var txt=$('#j-text').value.trim(); if(!txt){ toast('Write something first.'); return; } var jid=uid('j');
+    if(await guard(function(){return Store.put('journal',jid,{text:txt,prompt:$('#j-prompt').value,created:new Date().toISOString()});},'Entry saved')){ S.jtext=''; S.jprompt=''; } render(); }
+  else if(act==='del-journal'){ e.preventDefault(); if(S.confirmDelete!==id){ S.confirmDelete=id; render(); return; } S.confirmDelete=false; await guard(function(){return Store.del('journal',id);},'Entry deleted'); render(); }
+  else if(act==='report'||act==='themes'){ if(!S.sample||S.busy) return; var isR=act==='report', withJ=isR && $('#rp-journal') && $('#rp-journal').checked, outSel=isR?'#report-out':'#themes-out';
+    var input = isR ? REPORT_RULES+'\n\nABOUT THE PERSON (their own words):\n'+(S.profile.context||'(none provided)')+'\n\nDATA (JSON):\n'+JSON.stringify(reportPayload(withJ))
+      : 'Below are private journal entries from one person, newest first. Identify recurring themes across them. Write two sections, each starting with "## ": "Observations" (only what the entries literally say, with rough counts, e.g. "institutional pressure is mentioned in 3 entries") and "Tentative interpretations" (clearly hedged, at most four, each tied to the observations it rests on). Never diagnose or infer a psychiatric condition. No advice, no motivational language. Use "- " bullets. Under 300 words.\n\nENTRIES (JSON):\n'+JSON.stringify(S.journal.slice().sort(function(a,b2){return (b2.created||'').localeCompare(a.created||'');}).slice(0,30).map(function(j){return {date:(j.created||'').slice(0,10),prompt:j.prompt||null,text:j.text};}));
+    S.busy=act; b.disabled=true; b.textContent=isR?'Writing…':'Reading…';
+    try{ var res=await S.sample(input,{cache:false,onText:function(x){ var o=$(outSel); if(o) o.innerHTML=md(x.text); }});
+      var text=(res&&res.text)||''; if(text) await guard(function(){return Store.put('reports',isR?latest().date:'themes',{text:text,kind:isR?'weekly':'themes',created:new Date().toISOString()});});
+    }catch(err){ toast(err&&err.code==='rate_limited'?'Too many requests. Try again in a minute.':err&&err.code==='not_granted'?'AI analysis was not allowed for this page.':'The report could not be written. Try again.'); }
+    S.busy=null; render(); }
+  else if(act==='exp-csv') exportFile('self-determination-checkins.csv',SDD.csv(S.checkins));
+  else if(act==='exp-json') exportFile('self-determination-data.json',JSON.stringify({exported:new Date().toISOString(),profile:S.profile,checkins:cs(),interventions:S.interventions,journal:S.journal,reports:S.reports},null,2));
+  else if(act==='exp-pdf'){ if(!latest()){ toast('Nothing to export yet.'); return; } var buf=null; try{ buf=makePdf(); }catch(err2){} if(buf) exportFile('self-determination-report-'+latest().date+'.pdf',buf); else exportFile('self-determination-report-'+latest().date+'.md',plainReport()); }
+  else if(act==='save-profile'){ S.profile.context=$('#pf-context').value; S.profile.baselineWeeks=Math.max(3,Math.min(26,+$('#pf-weeks').value||6)); S.profile.manual={}; D.forEach(function(d){ var v=$('#bl-'+d.s).value; if(v!=='') S.profile.manual[d.s]=+v; }); await guard(function(){return Store.putProfile();},'Saved'); render(); }
+  else if(act==='wipe'){ S.confirmDelete='all'; render(); }
+  else if(act==='wipe-no'){ S.confirmDelete=false; render(); }
+  else if(act==='wipe-yes'){ S.confirmDelete=false; await guard(function(){return Store.wipe();},'All data deleted'); S.draft=null; render(); }
+});
+
+async function boot(){
+  route(); render();
+  await Store.init(); S.ready=true; render();
+  try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); }catch(e){}
+  if(false){
+    window.claude.use('sample').then(function(x){ S.sample=x||null; if(x && S.view==='report') render(); }).catch(function(){});
+    window.claude.use('downloads').then(function(x){ S.downloads=x||null; if(x && S.view==='data') render(); }).catch(function(){});
+  }
+}
+boot();
+})();
+</script>
+</body>
+</html>
